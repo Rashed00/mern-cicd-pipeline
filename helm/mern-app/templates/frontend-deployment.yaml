@@ -4,6 +4,8 @@ metadata:
   name: frontend
 spec:
   replicas: {{ .Values.frontend.replicas }}
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: frontend

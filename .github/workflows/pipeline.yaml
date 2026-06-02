@@ -143,4 +143,4 @@ jobs:
             --set backend.tag=${{ needs.build-and-scan.outputs.backend_tag }} \
             --set frontend.tag=${{ needs.build-and-scan.outputs.frontend_tag }} \
             --wait \
-            --timeout 5m
+            --timeout 10m
