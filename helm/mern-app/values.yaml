@@ -1,0 +1,18 @@
+ecr:
+  registry: 777000838881.dkr.ecr.eu-west-1.amazonaws.com
+  repository: mern-app
+
+backend:
+  tag: backend-latest
+  replicas: 1
+  port: 5000
+
+frontend:
+  tag: frontend-latest
+  replicas: 1
+  port: 3000
+
+mongo:
+  tag: "7"
+  port: 27017
+  storage: 1Gi

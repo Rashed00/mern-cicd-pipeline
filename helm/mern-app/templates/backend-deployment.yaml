@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+spec:
+  replicas: {{ .Values.backend.replicas }}
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: {{ .Values.ecr.registry }}/{{ .Values.ecr.repository }}:{{ .Values.backend.tag }}
+          ports:
+            - containerPort: {{ .Values.backend.port }}
+          env:
+            - name: PORT
+              value: "{{ .Values.backend.port }}"
+            - name: MONGO_URI
+              value: "mongodb://mongo:{{ .Values.mongo.port }}/todos"
+            - name: NODE_ENV
+              value: "production"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.backend.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.backend.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
