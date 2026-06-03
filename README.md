@@ -2,25 +2,33 @@
 
 ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?style=flat&logo=github-actions&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
-![Nginx](https://img.shields.io/badge/Nginx-009639?style=flat&logo=nginx&logoColor=white)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?style=flat&logo=kubernetes&logoColor=white)
+![Helm](https://img.shields.io/badge/Helm-0F1689?style=flat&logo=helm&logoColor=white)
+![Terraform](https://img.shields.io/badge/Terraform-7B42BC?style=flat&logo=terraform&logoColor=white)
+![AWS](https://img.shields.io/badge/AWS-232F3E?style=flat&logo=amazon-aws&logoColor=white)
 ![Trivy](https://img.shields.io/badge/Trivy-1904DA?style=flat&logo=aquasecurity&logoColor=white)
-![DigitalOcean](https://img.shields.io/badge/DigitalOcean-0080FF?style=flat&logo=digitalocean&logoColor=white)
 
-A multi-stage CI/CD pipeline for a full-stack MERN application. Every push runs lint, test, Docker build, Trivy security scan, and deploys to a DigitalOcean droplet via Docker Compose — with zero-downtime using Nginx as a reverse proxy.
+A production-grade CI/CD pipeline for a full-stack MERN Todo application. Every push to `main` automatically lints, tests, builds Docker images, runs a Trivy security scan, pushes to AWS ECR, and deploys to an EKS cluster via Helm — with zero manual steps.
 
 ---
 
-## Pipeline Stages
+## Architecture
 
 ```
-git push → GitHub Actions
-              │
-              ├── 1. Lint       (ESLint for JS, flake8 for any Python scripts)
-              ├── 2. Test        (Jest unit tests — frontend & backend)
-              ├── 3. Build       (Docker build for frontend + backend images)
-              ├── 4. Scan        (Trivy image vulnerability scan — CRITICAL/HIGH fail)
-              └── 5. Deploy      (SSH into droplet → docker compose pull && up -d)
-                                  └── Nginx handles routing + zero-downtime reload
+Developer push to main
+        │
+        ▼
+GitHub Actions
+        │
+        ├── 1. Lint        (ESLint — frontend & backend)
+        ├── 2. Test         (Vitest — frontend | Jest — backend)
+        ├── 3. Build        (Docker multi-stage build, tagged with commit SHA)
+        ├── 4. Scan         (Trivy — blocks on CRITICAL CVEs)
+        ├── 5. Push         (AWS ECR)
+        └── 6. Deploy       (Helm upgrade → EKS)
+                             └── Nginx Ingress → frontend / backend pods
+                                                       │
+                                                  MongoDB (ClusterIP only)
 ```
 
 ---
@@ -29,14 +37,17 @@ git push → GitHub Actions
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React |
+| Frontend | React + Vite |
 | Backend | Node.js + Express |
 | Database | MongoDB |
 | Containerization | Docker + Docker Compose |
+| Container Registry | AWS ECR |
+| Infrastructure | Terraform (VPC, EKS, ECR, EBS CSI) |
+| Orchestration | Kubernetes (EKS) |
+| Package Manager | Helm |
+| Ingress | Nginx Ingress Controller + AWS NLB |
 | CI/CD | GitHub Actions |
 | Security Scan | Trivy |
-| Reverse Proxy | Nginx |
-| Hosting | DigitalOcean Droplet |
 
 ---
 
@@ -44,95 +55,149 @@ git push → GitHub Actions
 
 ```
 mern-cicd-pipeline/
-├── frontend/                   # React app
-│   ├── src/
-│   ├── Dockerfile
-│   └── package.json
 ├── backend/                    # Express API
 │   ├── src/
+│   │   ├── models/Todo.js
+│   │   ├── routes/todos.js
+│   │   └── index.js
+│   ├── tests/todos.test.js
 │   ├── Dockerfile
 │   └── package.json
-├── nginx/                      # Nginx reverse proxy config
+├── frontend/                   # React app
+│   ├── src/
+│   │   ├── App.jsx
+│   │   ├── App.test.jsx
+│   │   └── main.jsx
+│   ├── Dockerfile
+│   └── package.json
+├── nginx/                      # Local dev reverse proxy
 │   └── nginx.conf
-├── docker-compose.yml          # Local & production compose file
-├── .github/
-│   └── workflows/
-│       └── pipeline.yaml       # Full CI/CD pipeline definition
+├── helm/mern-app/              # Helm chart for EKS deployment
+│   ├── Chart.yaml
+│   ├── values.yaml
+│   └── templates/
+│       ├── backend-deployment.yaml
+│       ├── backend-service.yaml
+│       ├── frontend-deployment.yaml
+│       ├── frontend-service.yaml
+│       ├── mongo-deployment.yaml
+│       ├── mongo-pvc.yaml
+│       ├── mongo-service.yaml
+│       └── ingress.yaml
+├── terraform/                  # AWS infrastructure
+│   ├── main.tf
+│   ├── variables.tf
+│   ├── outputs.tf
+│   └── terraform.tfvars
+├── k8s/
+│   └── storageclass.yaml       # gp2-csi EBS storage class
+├── docker-compose.yml          # Local development
+├── .github/workflows/
+│   └── pipeline.yaml           # CI/CD pipeline
 └── README.md
 ```
 
 ---
 
-## CI/CD Pipeline Details
+## Local Development
 
-### Stage 1 — Lint
-- ESLint on all `.js` / `.jsx` files in `frontend/` and `backend/`
-- Fails fast on any linting error before wasting build time
-
-### Stage 2 — Test
-- Jest unit tests for backend API routes
-- React Testing Library for frontend components
-- Coverage report uploaded as GitHub Actions artifact
-
-### Stage 3 — Build
-- Docker multi-stage build to keep image sizes minimal
-- Images tagged with the Git commit SHA for traceability
-- Pushed to Docker Hub on success
-
-### Stage 4 — Security Scan (Trivy)
-- Trivy scans both `frontend` and `backend` images
-- Pipeline fails if any `CRITICAL` or `HIGH` CVE is found
-- Scan results exported as a GitHub Actions artifact
-
-### Stage 5 — Deploy
-- GitHub Actions SSHs into the DigitalOcean droplet
-- Pulls latest images and runs `docker compose up -d --no-deps`
-- Nginx reloads config without dropping active connections (zero-downtime)
-
----
-
-## Setup & Usage
-
-> 🚧 **Implementation in progress** — setup instructions will be added as the project is built out.
-
-Prerequisites:
-- Docker & Docker Compose on your machine
-- DigitalOcean droplet (or any Linux VPS)
-- Docker Hub account
+Prerequisites: Docker, Docker Compose
 
 ```bash
 # Clone the repo
 git clone https://github.com/Rashed00/mern-cicd-pipeline.git
+cd mern-cicd-pipeline
 
-# Run locally with Docker Compose
+# Run locally
 docker compose up --build
 
-# App available at:
-# Frontend → http://localhost:3000
-# Backend  → http://localhost:5000
-# Via Nginx → http://localhost:80
+# App available at http://localhost:8080
 ```
 
-**Required GitHub Secrets:**
+---
+
+## Infrastructure Setup (Terraform)
+
+Prerequisites: Terraform, AWS CLI configured
+
+```bash
+cd terraform
+terraform init
+terraform plan
+terraform apply
 ```
-DOCKER_USERNAME       # Docker Hub username
-DOCKER_PASSWORD       # Docker Hub token
-DROPLET_HOST          # DigitalOcean droplet IP
-DROPLET_SSH_KEY       # Private SSH key for the droplet
+
+This provisions: VPC, 2 public subnets, IGW, EKS cluster, EKS node group (t3.small), ECR repository, EBS CSI driver addon, and all required IAM roles.
+
+After apply, configure kubectl:
+```bash
+aws eks update-kubeconfig --region eu-west-1 --name mern-cluster
+```
+
+---
+
+## Kubernetes Setup (one-time)
+
+```bash
+# Install Nginx Ingress Controller
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx --create-namespace
+
+# Create EBS storage class
+kubectl apply -f k8s/storageclass.yaml
+
+# Initial app deploy
+helm install mern-app helm/mern-app
+```
+
+---
+
+## CI/CD Pipeline
+
+### Required GitHub Secrets
+
+```
+AWS_ACCESS_KEY_ID        # AWS IAM access key
+AWS_SECRET_ACCESS_KEY    # AWS IAM secret key
+```
+
+### Pipeline Flow
+
+On every push to `main`:
+
+1. **Lint** — ESLint on frontend and backend source files
+2. **Test** — Vitest (frontend) and Jest (backend) with coverage
+3. **Build** — Docker multi-stage builds tagged with `<service>-<commit-sha>`
+4. **Scan** — Trivy scans both images, blocks on any CRITICAL CVE
+5. **Push** — Images pushed to AWS ECR
+6. **Deploy** — `helm upgrade` deploys new image tags to EKS, waits for rollout
+
+### Teardown (to save costs)
+
+```bash
+helm uninstall mern-app
+helm uninstall ingress-nginx -n ingress-nginx
+kubectl delete namespace ingress-nginx
+sleep 120
+cd terraform && terraform destroy
 ```
 
 ---
 
 ## Roadmap
 
-- [x] Project structure & README
-- [ ] Backend Express API (CRUD)
-- [ ] Frontend React app
-- [ ] Docker & Docker Compose setup
-- [ ] Nginx reverse proxy config
-- [ ] GitHub Actions pipeline (lint → test → build → scan → deploy)
-- [ ] Trivy scan integration
-- [ ] Zero-downtime deploy verification
+- [x] MERN app (React + Express + MongoDB)
+- [x] Dockerfiles with multi-stage builds
+- [x] Docker Compose for local development
+- [x] Nginx reverse proxy (local)
+- [x] Terraform — VPC, EKS, ECR, EBS CSI
+- [x] Helm chart for Kubernetes deployment
+- [x] Nginx Ingress Controller + AWS NLB
+- [x] GitHub Actions pipeline (lint → test → build → scan → push → deploy)
+- [x] Trivy security scan (blocks on CRITICAL)
+- [ ] HTTPS / SSL termination
+- [ ] Horizontal Pod Autoscaler
 
 ---
 
