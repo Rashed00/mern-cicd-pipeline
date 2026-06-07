@@ -15,20 +15,40 @@ A production-grade CI/CD pipeline for a full-stack MERN Todo application. Every 
 ## Architecture
 
 ```
+Internet
+   │
+   ▼
+AWS NLB (LoadBalancer Service)
+   │
+   ▼
+Nginx Ingress Controller
+   │
+   ├── /api/*  ──► backend Service (ClusterIP) ──► backend Pod
+   │                                                     │
+   │                                               MongoDB Service
+   │                                               (ClusterIP only)
+   │                                                     │
+   │                                               MongoDB Pod + EBS PVC
+   │
+   └── /*      ──► frontend Service (ClusterIP) ──► frontend Pod
+```
+
+---
+
+## CI/CD Workflow
+
+```
 Developer push to main
         │
         ▼
 GitHub Actions
         │
-        ├── 1. Lint        (ESLint — frontend & backend)
+        ├── 1. Lint         (ESLint — frontend & backend)
         ├── 2. Test         (Vitest — frontend | Jest — backend)
         ├── 3. Build        (Docker multi-stage build, tagged with commit SHA)
         ├── 4. Scan         (Trivy — blocks on CRITICAL CVEs)
         ├── 5. Push         (AWS ECR)
         └── 6. Deploy       (Helm upgrade → EKS)
-                             └── Nginx Ingress → frontend / backend pods
-                                                       │
-                                                  MongoDB (ClusterIP only)
 ```
 
 ---
